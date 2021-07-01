@@ -1,3 +1,55 @@
+---
+- name: Ensure that AWS infrastructure are configured
+  hosts: localhost
+  gather_facts: False
+  vars:
+    keypair: WindowsBook
+    instance_type: t2.micro
+    image: ami-00399ec92321828f5
+    group: DevopsGroup
+    region: us-east-2
+
+
+  tasks:
+
+    - name: Provision a set of instances
+      ec2:
+#         instance_profile_name: work
+         aws_access_key: "{{ my_access_key }}"
+         aws_secret_key: "{{ my_secret_key }}"
+         key_name: "{{ keypair }}"
+         group: "{{ group }}"
+         instance_type: "{{ instance_type }}"
+         image: "{{ image }}"
+         region: "{{ region }}"
+         user_data: "apt update && apt install python -y"
+         wait: true
+         exact_count: 1
+         count_tag:
+            Name: devops
+         instance_tags:
+            Name: devops
+      register: ec2
+
+    - name: Add all instance public IPs to host group
+      add_host: hostname={{ item.public_ip }} groups=ec2_build
+      loop: "{{ ec2.instances }}"
+
+    - name: Wait for SSH to come up
+      wait_for: host={{ item.public_dns_name }} port=22 delay=60 timeout=320 state=started
+      loop: "{{ ec2.instances }}"
+
+    - name: Add nodes to known hosts
+      shell: ssh-keyscan -H {{ item.public_ip }} >> ~/.ssh/known_hosts
+      loop: "{{ ec2.instances }}"
+
+    # Create a simple S3 bucket
+    - name: Ensure S3 bucket presented
+      s3_bucket:
+        name: bucket4artifacts
+        state: present
+
+
 - name: Configuration of build node
   hosts: ec2_build
   user: ubuntu
@@ -33,26 +85,26 @@
       mode: put
 
 
-  
-- name: production
-  hosts: prod
-  become: yes
+# - name: production
+#   hosts: prod
+#   become: yes
 
-  tasks:
-  - name: Ensure tomcat package is present
-    apt:
-      name: tomcat9
-      state: present
+#   tasks:
+#   - name: Ensure tomcat package is present
+#     apt:
+#       name: tomcat9
+#       state: present
 
-  # Synchronization of src on the deligate host to the dest on the inventory host in pull mode
-  - name:  Implement of transfer artifact to prodaction server
-    aws_s3:
-      bucket: bucket4artifacts
-      object: hello-1.0.war
-      dest: /var/lib/tomcat9/webapps/hello-1.0.war
-      mode: get
+#   # Synchronization of src on the deligate host to the dest on the inventory host in pull mode
+#   - name:  Implement of transfer artifact to prodaction server
+#     aws_s3:
+#       bucket: bucket4artifacts
+#       object: hello-1.0.war
+#       dest: /var/lib/tomcat9/webapps/hello-1.0.war
+#       mode: get
 
-  - name: Ensure tomcat service is started
-    service:
-     name: tomcat9
-     state: started
+#   - name: Ensure tomcat service is started
+#     service:
+#      name: tomcat9
+#      state: started
+
