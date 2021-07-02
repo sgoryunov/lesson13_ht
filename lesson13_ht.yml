@@ -1,8 +1,9 @@
-
+---
 - name: Ensure that AWS infrastructure are configured
   hosts: localhost
   gather_facts: False
   vars:
+    iam_prifile_name: S3_user
     keypair: WindowsBook
     instance_type: t2.micro
     image: ami-00399ec92321828f5
@@ -14,8 +15,7 @@
 
     - name: Provision a set of instances
       ec2:
-        #  aws_access_key: "{{ my_access_key }}"
-        #  aws_secret_key: "{{ my_secret_key }}"
+         instance_profile_name: "{{ iam_prifile_name }}"
          key_name: "{{ keypair }}"
          group: "{{ group }}"
          instance_type: "{{ instance_type }}"
@@ -87,7 +87,7 @@
 
 - name: Configure production server
   hosts: ec2_prod
-  remote_user: ubuntu
+  user: ubuntu
   become: yes
 
   tasks:
