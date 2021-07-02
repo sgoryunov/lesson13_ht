@@ -1,4 +1,4 @@
----
+
 - name: Ensure that AWS infrastructure are configured
   hosts: localhost
   gather_facts: False
@@ -14,9 +14,8 @@
 
     - name: Provision a set of instances
       ec2:
-#         instance_profile_name: work
-         aws_access_key: "{{ my_access_key }}"
-         aws_secret_key: "{{ my_secret_key }}"
+        #  aws_access_key: "{{ my_access_key }}"
+        #  aws_secret_key: "{{ my_secret_key }}"
          key_name: "{{ keypair }}"
          group: "{{ group }}"
          instance_type: "{{ instance_type }}"
@@ -24,16 +23,17 @@
          region: "{{ region }}"
          user_data: "apt update && apt install python -y"
          wait: true
-         exact_count: 1
+         exact_count: 2
          count_tag:
-            Name: devops
+            Name: devops13
          instance_tags:
-            Name: devops
+            Name: devops13
       register: ec2
 
-    - name: Add all instance public IPs to host group
-      add_host: hostname={{ item.public_ip }} groups=ec2_build
-      loop: "{{ ec2.instances }}"
+    - name: Add all instance public IPs to buld group
+      add_host: hostname={{ ec2.instances[0].public_ip }} groups=ec2_build
+    - name: Add all instance public IPs to production group
+      add_host: hostname={{ ec2.instances[1].public_ip }} groups=ec2_prod
 
     - name: Wait for SSH to come up
       wait_for: host={{ item.public_dns_name }} port=22 delay=60 timeout=320 state=started
@@ -52,7 +52,7 @@
 
 - name: Configuration of build node
   hosts: ec2_build
-  user: ubuntu
+  remote_user: ubuntu
   gather_facts: true
 
   tasks:
@@ -85,26 +85,32 @@
       mode: put
 
 
-# - name: production
-#   hosts: prod
-#   become: yes
+- name: Configure production server
+  hosts: ec2_prod
+  user: ubuntu
+  become: yes
 
-#   tasks:
-#   - name: Ensure tomcat package is present
-#     apt:
-#       name: tomcat9
-#       state: present
+  tasks:
+  - name: Ensure tomcat package is present
+    apt:
+      update_cache: yes
+      name:
+      - tomcat9
+      - python3-pip
+      state: present
 
-#   # Synchronization of src on the deligate host to the dest on the inventory host in pull mode
-#   - name:  Implement of transfer artifact to prodaction server
-#     aws_s3:
-#       bucket: bucket4artifacts
-#       object: hello-1.0.war
-#       dest: /var/lib/tomcat9/webapps/hello-1.0.war
-#       mode: get
+  - name: Installing boto3
+    shell: pip3 install --upgrade boto3
 
-#   - name: Ensure tomcat service is started
-#     service:
-#      name: tomcat9
-#      state: started
+  # Copy artifact to prod server
+  - name:  Implement of transfer artifact to prodaction server
+    aws_s3:
+      bucket: bucket4artifacts
+      object: hello-1.0.war
+      dest: /var/lib/tomcat9/webapps/hello-1.0.war
+      mode: get
 
+  - name: Ensure tomcat service is started
+    service:
+     name: tomcat9
+     state: started
